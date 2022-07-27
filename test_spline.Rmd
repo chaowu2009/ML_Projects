@@ -1,0 +1,175 @@
+---
+title: "test_spline"
+author: "CWu"
+date: "6/26/2022"
+output: html_document
+# Ref: https://medium.com/analytics-vidhya/spline-regression-in-r-960ca82aa62c
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r load data and create models}
+# summary(cars)
+
+data = read_csv("day_sale.csv")
+summary(data)
+
+library(ggplot2)
+
+ggplot(data, aes(x=Day, y = Sales)) + geom_point()
+
+```
+
+
+```{r fit, echo=FALSE}
+
+# linear fit
+model_1 = lm(Sales~Day, data=data)
+summary(model_1)
+
+plot(Sales~Day, data)
+lines(data$Day, predict(model_1), col='blue')
+legend(x = "topright",
+       legend = c("original", "fit"))
+
+title("linear fit")
+
+# polynomial fit (2nd order)
+model_2= lm(Sales~ poly(Day, 2)+Day, data=data)
+summary(model_2)
+
+plot(Sales~Day, data)
+lines(data$Day, predict(model_2), col='blue')
+legend(x = "topright",
+       legend = c("original", "fit"))
+
+title("2nd polynomial fit")
+
+# introducing a variable and split the region into two.
+data$X_bar = ifelse(data$Day>90, 1, 0)
+
+data$diff = data$Day-90
+
+data$X = data$diff*data$X_bar
+
+model_3= lm(Sales~ Day + X, data=data)
+summary(model_3)
+
+plot(Sales~Day, data)
+lines(data$Day, predict(model_3), col='blue')
+legend(x = "topright",
+       legend = c("original", "fit"))
+
+title("two-region fit")
+
+# spline approach
+
+library(splines)
+
+
+#let’s introduce spline package in R which includes the function bs for creating b-spline term in a regression model.
+
+model_4 = lm(Sales~ ns(Day, knots=c(90)), data=data)
+summary(model_4)
+
+plot(Sales~Day, data)
+lines(data$Day, predict(model_4), col='blue')
+legend(x = "topright",
+       legend = c("original", "fit"))
+
+title("spline fit")
+
+
+```
+
+```{r simulated_data, echo=FALSE}
+
+# Ref: http://users.stat.umn.edu/~helwig/notes/smooth-spline-notes.html
+
+# define function
+n <- 101
+x <- seq(0, 1, length.out = n)
+fx <- sin(2 * pi * x)
+
+# generate noisy data
+set.seed(1)
+y <- fx + rnorm(n, sd = 0.5)
+
+# plot data and f(x)
+plot(x, y)             # data
+lines(x, fx, lwd = 2)  # f(x)
+legend("topright", legend = "f(x)", lty = 1, lwd = 2, bty = "n")
+```
+```{r analysis and modeling}
+# load 'npreg' package
+library(npreg)
+
+# fit using ss
+mod.ss <- ss(x, y, nknots = 10)
+mod.ss
+
+# fit using smooth.spline
+mod.smsp <- smooth.spline(x, y, nknots = 10)
+mod.smsp
+
+# rmse between solutions
+sqrt(mean(( mod.ss$y - mod.smsp$y )^2))
+
+# rmse between solutions and f(x)
+sqrt(mean(( fx - mod.ss$y )^2))
+
+# plot results
+plot(x, y)
+lines(x, fx, lwd = 2)
+lines(x, mod.ss$y, lty = 2, col = 2, lwd = 2)
+lines(x, mod.smsp$y, lty = 3, col = 3, lwd = 2)
+legend("topright", 
+       legend = c("f(x)", "ss", "smooth.spline"), 
+       lty = 1:3, col = 1:3, lwd = 2, bty = "n")
+
+
+# plot method
+# The gray shaded area denotes a 95% Bayesian “confidence interval” for the unknown function.
+plot(mod.ss)
+#title("mod.ss")
+
+# subplots (1 x 3)
+par(mfrow = c(1,3))
+
+# lambda = 1e-15 (df = n)
+mod.ss0 <- ss(x, y, all.knots = TRUE, lambda = 1e-15)
+plot(mod.ss0, ylim = c(-1.75, 1.75))
+points(x, y)
+
+# GCV selection
+mod.ss <- ss(x, y, all.knots = TRUE)
+plot(mod.ss, ylim = c(-1.75, 1.75))
+points(x, y)
+
+# lambda = 100 (df = m)
+mod.ss10 <- ss(x, y, all.knots = TRUE, lambda = 100)
+plot(mod.ss10, ylim = c(-1.75, 1.75))
+points(x, y)
+
+# Setting m=2 produces a cubic smoothing spline, which penalizes the squared second derivative of the function. Cubic smoothing splines are the default in many software. 
+mod.lin <- ss(x, y, nknots = 10, m = 1)
+mod.cub <- ss(x, y, nknots = 10)
+mod.qui <- ss(x, y, nknots = 10, m = 3)
+par(mfrow = c(1,3))
+plot(mod.lin, ylim = c(-1.75, 1.75))
+points(x, y)
+plot(mod.cub, ylim = c(-1.75, 1.75))
+points(x, y)
+plot(mod.qui, ylim = c(-1.75, 1.75))
+points(x, y)
+
+```
+
